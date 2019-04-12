@@ -51,7 +51,7 @@ function init() {
 
     var sphere = sphereBuffers(gl);
     var cube = cubeBuffers(gl);
-    const buffers = cube;
+    const buffers = sphere;
 
     // Draw surface
     var then = 0;
@@ -73,22 +73,82 @@ function init() {
 // Returns the buffers for generating the sphere
 function sphereBuffers(gl) {
 
+    let latitudeBands = 50;
+    let longitudeBands = 50;
+    let radius = 2;
+
+    const vertices = [];
+    let normals = [];
+
     const verticesBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
 
-    const vertices = [];
+    //const normalsBuffer = gl.createBuffer();
+    //gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
+
+    // Calculate sphere vertex positions, normals, and texture coordinates.
+    for (let latNumber = 0; latNumber <= latitudeBands; ++latNumber) {
+        let theta = latNumber * Math.PI / latitudeBands;
+        let sinTheta = Math.sin(theta);
+        let cosTheta = Math.cos(theta);
+
+        for (let longNumber = 0; longNumber <= longitudeBands; ++longNumber) {
+            let phi = longNumber * 2 * Math.PI / longitudeBands;
+            let sinPhi = Math.sin(phi);
+            let cosPhi = Math.cos(phi);
+
+            let x = cosPhi * sinTheta;
+            let y = cosTheta;
+            let z = sinPhi * sinTheta;
+
+            vertices.push(radius * x);
+            vertices.push(radius * y);
+            vertices.push(radius * z);
+
+            normals.push(x);
+            normals.push(y);
+            normals.push(z);
+        }
+    }
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-
-    const indexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    //gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
     const indices = [];
 
+    // Calculate sphere indices.
+    for (let latNumber = 0; latNumber < latitudeBands; ++latNumber) {
+        for (let longNumber = 0; longNumber < longitudeBands; ++longNumber) {
+            let first = (latNumber * (longitudeBands + 1)) + longNumber;
+            let second = first + longitudeBands + 1;
+
+            indices.push(first);
+            indices.push(second);
+            indices.push(first + 1);
+
+            indices.push(second);
+            indices.push(second + 1);
+            indices.push(first + 1);
+        }
+    }
+
+    const indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+    const colors = [];
+
+    for (const vertex in vertices) {
+        colors.push(1.0,  0.0,  1.0,  1.0);
+    }
+
+    const colorsBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorsBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
     return {
         vertices: verticesBuffer,
+        colors: colorsBuffer,
         indices: indexBuffer
     };
 }
@@ -176,8 +236,7 @@ function cubeBuffers(gl) {
         colors = colors.concat(c, c, c, c);
     }
 
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors),
-                    gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
     return {vertices: verticesBuffer,
             colors: colorBuffer,
@@ -208,9 +267,13 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
                        zFar);
 
     const modelViewMatrix = glMatrix.mat4.create();
+    /*
     glMatrix.mat4.translate(modelViewMatrix,
                  modelViewMatrix,
                  [0.0, 0.0, -6.0]);
+    */
+    glMatrix.mat4.lookAt(modelViewMatrix, [0.0, 0.0, 10.0], [0.0, 0.0 , 0.0], [0.0, 1.0, 0.0]);
+/*
     glMatrix.mat4.rotate(modelViewMatrix,
                   modelViewMatrix,
                   cubeRotation,
@@ -219,6 +282,7 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
                   modelViewMatrix,
                   cubeRotation * .7,
                   [0, 1, 0]);
+*/
 
     {
         const numComponents = 3;
@@ -272,7 +336,8 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
 
     {
         const offset = 0;
-        const vertexCount = 36;
+        //const vertexCount = 36;
+        const vertexCount = 7803
         const type = gl.UNSIGNED_SHORT;
         gl.drawElements(gl.TRIANGLES, vertexCount, type, offset);
     }
