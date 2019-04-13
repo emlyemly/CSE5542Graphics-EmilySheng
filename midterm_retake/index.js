@@ -9,17 +9,27 @@ function init() {
     canvas.height = document.body.clientHeight;
     gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
 
-    // change shader programs
     // Initialize shaders
     const vsSource = `
         attribute vec4 aVertexPosition;
+        attribute vec4 aVertexNormal;
         attribute vec4 aVertexColor;
+
+        uniform vec4 uLightPosition;
+        uniform vec4 uKd;
+        uniform vec4 uKs;
+        uniform vec4 uKa;
 
         uniform mat4 uModelViewMatrix;
         uniform mat4 uProjectionMatrix;
+
         varying lowp vec4 vColor;
+        varying lowp vec4 LightIntensity;
 
         void main(void) {
+            vec4 eyeCoords = uModelViewMatrix * aVertexPosition;
+            vec4 s = uLightPosition - eyeCoords;
+            //LightIntensity = uKd * uKs * max(dot(s, aVertexNormal), 0.0);
             gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
             vColor = aVertexColor;
         }
@@ -39,9 +49,14 @@ function init() {
         program: shaderProgram,
         attribLocations: {
             vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+            //vertexNormal: gl.getAttribLocation(shaderProgram, 'aVertexNormal'),
             vertexColor: gl.getAttribLocation(shaderProgram, 'aVertexColor'),
         },
         uniformLocations: {
+            lightPosition: gl.getUniformLocation(shaderProgram, 'uLightPosition'),
+            kd: gl.getAttribLocation(shaderProgram, 'uKd'),
+            ks: gl.getAttribLocation(shaderProgram, 'uKs'),
+            ka: gl.getAttribLocation(shaderProgram, 'uKa'),
             projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
             modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
         }
@@ -83,10 +98,10 @@ function sphereBuffers(gl) {
     const verticesBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
 
-    //const normalsBuffer = gl.createBuffer();
-    //gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
+    const normalsBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
 
-    // Calculate sphere vertex positions
+    // Calculate sphere vertices
     for (var latNumber = 0; latNumber <= latitudeBands; latNumber++) {
         var theta = latNumber * Math.PI / latitudeBands;
         var sinTheta = Math.sin(theta);
@@ -112,7 +127,7 @@ function sphereBuffers(gl) {
     }
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-    //gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
     const indices = [];
 
@@ -148,6 +163,7 @@ function sphereBuffers(gl) {
 
     return {
         vertices: verticesBuffer,
+        normals: normalsBuffer,
         colors: colorsBuffer,
         indices: indexBuffer
     };
@@ -200,6 +216,13 @@ function cubeBuffers(gl) {
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
+    const normalsBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
+
+    const normals = [];
+
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
     const indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
 
@@ -239,8 +262,10 @@ function cubeBuffers(gl) {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
     return {vertices: verticesBuffer,
+            normals: normalsBuffer,
             colors: colorBuffer,
-            indices: indexBuffer};
+            indices: indexBuffer
+    };
 }
 
 
@@ -266,8 +291,9 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
                        zNear,
                        zFar);
 
+    // set viewpoint to (5, 4.5, 4) and viewdir to (5, -3.5, -4)
     const cameraMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.lookAt(cameraMatrix, [5.0, 0.0, 10.0], [5.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    glMatrix.mat4.lookAt(cameraMatrix, [5.0, 8.0, 8.0], [5.0, 4.5, 4.0], [0.0, 1.0, 0.0]);
 
     const viewMatrix = glMatrix.mat4.clone(cameraMatrix);
     glMatrix.mat4.copy(viewMatrix, cameraMatrix);
@@ -275,13 +301,13 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
     var cubeMatrix = glMatrix.mat4.create();
     glMatrix.mat4.translate(cubeMatrix,
                  cubeMatrix,
-                 [0.0, 0.0, -3.0]);
+                 [0.0, 0.0, -5.0]);
     cubeMatrix = glMatrix.mat4.multiply(cubeMatrix, cubeMatrix, viewMatrix);
 
     var sphereMatrix = glMatrix.mat4.create();
     glMatrix.mat4.translate(sphereMatrix,
                      sphereMatrix,
-                     [10.0, 0.0, -10.0]);
+                     [10.0, 0.0, -5.0]);
     sphereMatrix = glMatrix.mat4.multiply(sphereMatrix, sphereMatrix, viewMatrix);
 
 /*
@@ -302,6 +328,7 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
 }
 
 
+// Sets attributes from buffer data and uniforms
 function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, modelViewMatrix) {
     {
         const numComponents = 3;
@@ -319,6 +346,24 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
             offset);
         gl.enableVertexAttribArray(
             programInfo.attribLocations.vertexPosition);
+    }
+
+    {
+        const numComponents = 3;
+        const type = gl.FLOAT;
+        const normalize = false;
+        const stride = 0;
+        const offset = 0;
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer.normals);
+        gl.vertexAttribPointer(
+            programInfo.attribLocations.vertexNormal,
+            numComponents,
+            type,
+            normalize,
+            stride,
+            offset);
+        gl.enableVertexAttribArray(
+            programInfo.attribLocations.vertexNormal);
     }
 
     {
@@ -342,19 +387,22 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer.indices);
 
     // Set the shader uniforms
+    gl.uniform4fv(programInfo.uniformLocations.lightPosition, [-5.0, 10.0, 0.0, 1.0]);
+    //gl.uniform3fv(programInfo.uniformLocations.kd, [-5.0, 10.0, 0.0]);
+    //gl.uniform3fv(programInfo.uniformLocations.ks, [-5.0, 10.0, 0.0]);
+    //gl.uniform3fv(programInfo.uniformLocations.ka, [0.1, 0.1, 0.1]);
+
     gl.uniformMatrix4fv(
-      programInfo.uniformLocations.projectionMatrix,
-      false,
-      projectionMatrix);
+        programInfo.uniformLocations.projectionMatrix,
+        false,
+        projectionMatrix);
     gl.uniformMatrix4fv(
-      programInfo.uniformLocations.modelViewMatrix,
-      false,
-      modelViewMatrix);
+        programInfo.uniformLocations.modelViewMatrix,
+        false,
+        modelViewMatrix);
 
     {
         const offset = 0;
-        //const vertexCount = 36;
-        //const vertexCount = 15000;
         const type = gl.UNSIGNED_SHORT;
         gl.drawElements(gl.TRIANGLES, vertexCount, type, offset);
     }
