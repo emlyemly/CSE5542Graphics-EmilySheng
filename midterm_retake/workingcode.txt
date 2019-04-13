@@ -51,7 +51,7 @@ function init() {
 
     var sphere = sphereBuffers(gl);
     var cube = cubeBuffers(gl);
-    const buffers = [cube, sphere];
+    const buffers = cube;
 
     // Draw surface
     var then = 0;
@@ -113,6 +113,7 @@ function sphereBuffers(gl) {
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
     //gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+    console.log(vertices);
 
     const indices = [];
 
@@ -266,24 +267,13 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
                        zNear,
                        zFar);
 
-    const cameraMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.lookAt(cameraMatrix, [5.0, 0.0, 10.0], [5.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
-
-    const viewMatrix = glMatrix.mat4.clone(cameraMatrix);
-    glMatrix.mat4.copy(viewMatrix, cameraMatrix);
-
-    var cubeMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.translate(cubeMatrix,
-                 cubeMatrix,
-                 [0.0, 0.0, -3.0]);
-    cubeMatrix = glMatrix.mat4.multiply(cubeMatrix, cubeMatrix, viewMatrix);
-
-    var sphereMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.translate(sphereMatrix,
-                     sphereMatrix,
-                     [10.0, 0.0, -10.0]);
-    sphereMatrix = glMatrix.mat4.multiply(sphereMatrix, sphereMatrix, viewMatrix);
-
+    const modelViewMatrix = glMatrix.mat4.create();
+    /*
+    glMatrix.mat4.translate(modelViewMatrix,
+                 modelViewMatrix,
+                 [0.0, 0.0, -6.0]);
+    */
+    glMatrix.mat4.lookAt(modelViewMatrix, [0.0, 0.0, 10.0], [0.0, 0.0 , 0.0], [0.0, 1.0, 0.0]);
 /*
     glMatrix.mat4.rotate(modelViewMatrix,
                   modelViewMatrix,
@@ -295,21 +285,13 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
                   [0, 1, 0]);
 */
 
-    gl.useProgram(programInfo.program);
-    setShapeInfo(buffers[0], 36, gl, programInfo, projectionMatrix, cubeMatrix);
-    setShapeInfo(buffers[1], 15000, gl, programInfo, projectionMatrix, sphereMatrix);
-    cubeRotation += deltaTime;
-}
-
-
-function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, modelViewMatrix) {
     {
         const numComponents = 3;
         const type = gl.FLOAT;
         const normalize = false;
         const stride = 0;
         const offset = 0;
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer.vertices);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vertices);
         gl.vertexAttribPointer(
             programInfo.attribLocations.vertexPosition,
             numComponents,
@@ -327,7 +309,7 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
         const normalize = false;
         const stride = 0;
         const offset = 0;
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer.colors);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.colors);
         gl.vertexAttribPointer(
             programInfo.attribLocations.vertexColor,
             numComponents,
@@ -339,7 +321,9 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
             programInfo.attribLocations.vertexColor);
     }
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer.indices);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indices);
+
+    gl.useProgram(programInfo.program);
 
     // Set the shader uniforms
     gl.uniformMatrix4fv(
@@ -353,11 +337,23 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
 
     {
         const offset = 0;
-        //const vertexCount = 36;
+        const vertexCount = 36;
         //const vertexCount = 15000;
         const type = gl.UNSIGNED_SHORT;
         gl.drawElements(gl.TRIANGLES, vertexCount, type, offset);
     }
+
+    cubeRotation += deltaTime;
+}
+
+
+function setSphereInfo() {
+
+}
+
+
+function setCubeInfo() {
+
 }
 
 
