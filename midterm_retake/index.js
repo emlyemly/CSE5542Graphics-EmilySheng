@@ -16,30 +16,40 @@ function init() {
         attribute vec4 aVertexColor;
 
         uniform vec4 uLightPosition;
-        uniform vec4 uKd;
-        uniform vec4 uKs;
-        uniform vec4 uKa;
-
         uniform mat4 uModelViewMatrix;
         uniform mat4 uProjectionMatrix;
 
         varying lowp vec4 vColor;
-        varying lowp vec4 LightIntensity;
+        varying lowp vec4 vLightColor;
+        varying lowp vec4 vLightIntensity;
+
+        vec4 phong(vec4 vertex, vec4 normal) {
+
+            vec4 ambient = vec4(1, 1, 1, 1) * vLightColor;
+            vec4 diffuse = vec4(0.8, 0.8, 0.8, 0.8) * vLightColor;
+            vec4 specular = vec4(5, 5, 5, 5) * vLightColor;
+
+            return vec4(ambient + diffuse + specular);
+        }
 
         void main(void) {
-            vec4 eyeCoords = uModelViewMatrix * aVertexPosition;
-            vec4 s = uLightPosition - eyeCoords;
-            //LightIntensity = uKd * uKs * max(dot(s, aVertexNormal), 0.0);
+            vLightColor = vec4(1.0, 0.3, 0.2, 1.0);
             gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
             vColor = aVertexColor;
+
+            vec4 vertex = uModelViewMatrix * aVertexPosition;
+            vec4 normal = aVertexNormal;
+            vLightIntensity = phong(vertex, normal);
         }
     `;
 
     const fsSource = `
         varying lowp vec4 vColor;
+        varying lowp vec4 vLightColor;
+        varying lowp vec4 vLightIntensity;
 
         void main(void) {
-            gl_FragColor = vColor;
+            gl_FragColor = vec4(vec4(vColor * vLightIntensity).rgb, vColor.a);
         }
     `;
 
@@ -49,14 +59,11 @@ function init() {
         program: shaderProgram,
         attribLocations: {
             vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
-            //vertexNormal: gl.getAttribLocation(shaderProgram, 'aVertexNormal'),
+            vertexNormal: gl.getAttribLocation(shaderProgram, 'aVertexNormal'),
             vertexColor: gl.getAttribLocation(shaderProgram, 'aVertexColor'),
         },
         uniformLocations: {
             lightPosition: gl.getUniformLocation(shaderProgram, 'uLightPosition'),
-            kd: gl.getAttribLocation(shaderProgram, 'uKd'),
-            ks: gl.getAttribLocation(shaderProgram, 'uKs'),
-            ka: gl.getAttribLocation(shaderProgram, 'uKa'),
             projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
             modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
         }
@@ -64,8 +71,8 @@ function init() {
 
     cubeRotation = 0.0;
 
-    var sphere = sphereBuffers(gl);
     var cube = cubeBuffers(gl);
+    var sphere = sphereBuffers(gl);
     const buffers = [cube, sphere];
 
     // Draw surface
@@ -98,9 +105,6 @@ function sphereBuffers(gl) {
     const verticesBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
 
-    const normalsBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
-
     // Calculate sphere vertices
     for (var latNumber = 0; latNumber <= latitudeBands; latNumber++) {
         var theta = latNumber * Math.PI / latitudeBands;
@@ -127,6 +131,9 @@ function sphereBuffers(gl) {
     }
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+    const normalsBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
     const indices = [];
@@ -153,7 +160,7 @@ function sphereBuffers(gl) {
 
     const colors = [];
 
-    for (const vertex in vertices) {
+    for (var i=0; i < vertices.length/3; i++) {
         colors.push(1.0,  0.0,  1.0,  1.0);
     }
 
@@ -307,7 +314,7 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
     var sphereMatrix = glMatrix.mat4.create();
     glMatrix.mat4.translate(sphereMatrix,
                      sphereMatrix,
-                     [10.0, 0.0, -5.0]);
+                     [10.0, 0.0, -8.0]);
     sphereMatrix = glMatrix.mat4.multiply(sphereMatrix, sphereMatrix, viewMatrix);
 
 /*
@@ -330,6 +337,15 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
 
 // Sets attributes from buffer data and uniforms
 function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, modelViewMatrix) {
+
+/*
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+*/
+
     {
         const numComponents = 3;
         const type = gl.FLOAT;
@@ -388,9 +404,6 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
 
     // Set the shader uniforms
     gl.uniform4fv(programInfo.uniformLocations.lightPosition, [-5.0, 10.0, 0.0, 1.0]);
-    //gl.uniform3fv(programInfo.uniformLocations.kd, [-5.0, 10.0, 0.0]);
-    //gl.uniform3fv(programInfo.uniformLocations.ks, [-5.0, 10.0, 0.0]);
-    //gl.uniform3fv(programInfo.uniformLocations.ka, [0.1, 0.1, 0.1]);
 
     gl.uniformMatrix4fv(
         programInfo.uniformLocations.projectionMatrix,
