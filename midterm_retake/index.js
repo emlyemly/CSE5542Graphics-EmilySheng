@@ -15,40 +15,55 @@ function init() {
         attribute vec4 aVertexNormal;
         attribute vec4 aVertexColor;
 
-        uniform vec4 uLightPosition;
         uniform mat4 uModelViewMatrix;
         uniform mat4 uProjectionMatrix;
+        uniform vec4 uLightPosition;
+        uniform vec4 uLightColor;
 
         varying lowp vec4 vColor;
-        varying lowp vec4 vLightColor;
-        varying lowp vec4 vLightIntensity;
+        varying lowp vec4 vVertexPosition;
+        varying lowp vec4 vVertexNormal;
+
+        void main(void) {
+            vVertexPosition = aVertexPosition;
+            vVertexNormal = aVertexNormal;
+            gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+            vColor = aVertexColor;
+        }
+    `;
+
+    const fsSource = `
+        precision highp float;
+        uniform mat4 uModelViewMatrix;
+        uniform vec4 uLightPosition;
+        uniform vec4 uLightColor;
+
+        varying lowp vec4 vColor;
+        varying lowp vec4 vVertexPosition;
+        varying lowp vec4 vVertexNormal;
+
 
         vec4 phong(vec4 vertex, vec4 normal) {
+            vec4 surface = normalize(vec4(uLightPosition - vertex));
+            float surfaceToLight = max(dot(normal, surface), 0.0);
+            vec4 reflection = reflect(-surface, normal);
+            vec4 surfaceToCamera = normalize(-vertex);
 
-            vec4 ambient = vec4(1, 1, 1, 1) * vLightColor;
-            vec4 diffuse = vec4(0.8, 0.8, 0.8, 0.8) * vLightColor;
-            vec4 specular = vec4(5, 5, 5, 5) * vLightColor;
+            vec4 ambient = 1.0 * vec4(0.1, 0.1, 0.1, 0.0);
+            vec4 diffuse = uLightColor * vec4(0.8, 0.8, 0.8, 8.0) * surfaceToLight;
+            vec4 specular = uLightColor * vec4(0.6, 0.6, 0.6, 0.0);
+
+            if (surfaceToLight > 0.0) {
+                specular = specular * pow(max(dot(reflection, surfaceToCamera), 0.0), 5.0);
+            }
 
             return vec4(ambient + diffuse + specular);
         }
 
         void main(void) {
-            vLightColor = vec4(1.0, 0.3, 0.2, 1.0);
-            gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
-            vColor = aVertexColor;
-
-            vec4 vertex = uModelViewMatrix * aVertexPosition;
-            vec4 normal = aVertexNormal;
-            vLightIntensity = phong(vertex, normal);
-        }
-    `;
-
-    const fsSource = `
-        varying lowp vec4 vColor;
-        varying lowp vec4 vLightColor;
-        varying lowp vec4 vLightIntensity;
-
-        void main(void) {
+            vec4 vertex = uModelViewMatrix * vVertexPosition;
+            vec4 normal = vVertexNormal;
+            vec4 vLightIntensity = phong(vertex, normal);
             gl_FragColor = vec4(vec4(vColor * vLightIntensity).rgb, vColor.a);
         }
     `;
@@ -63,9 +78,10 @@ function init() {
             vertexColor: gl.getAttribLocation(shaderProgram, 'aVertexColor'),
         },
         uniformLocations: {
-            lightPosition: gl.getUniformLocation(shaderProgram, 'uLightPosition'),
             projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
             modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+            lightPosition: gl.getUniformLocation(shaderProgram, 'uLightPosition'),
+            lightColor: gl.getUniformLocation(shaderProgram, 'uLightColor'),
         }
     };
 
@@ -338,14 +354,6 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
 // Sets attributes from buffer data and uniforms
 function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, modelViewMatrix) {
 
-/*
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-    gl.clearDepth(1.0);
-    gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LEQUAL);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-*/
-
     {
         const numComponents = 3;
         const type = gl.FLOAT;
@@ -403,7 +411,8 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer.indices);
 
     // Set the shader uniforms
-    gl.uniform4fv(programInfo.uniformLocations.lightPosition, [-5.0, 10.0, 0.0, 1.0]);
+    gl.uniform4fv(programInfo.uniformLocations.lightPosition, [5.0, 5.0, -4.0, 0.0]);
+    gl.uniform4fv(programInfo.uniformLocations.lightColor, [1.0, 0.3, 0.2, 1.0]);
 
     gl.uniformMatrix4fv(
         programInfo.uniformLocations.projectionMatrix,
