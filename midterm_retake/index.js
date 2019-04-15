@@ -32,6 +32,7 @@ function init() {
         }
     `;
 
+    // Use per-fragment phong shading
     const fsSource = `
         precision highp float;
         uniform mat4 uModelViewMatrix;
@@ -42,27 +43,27 @@ function init() {
         varying lowp vec4 vVertexPosition;
         varying lowp vec4 vVertexNormal;
 
+        vec4 phong(vec3 vertex, vec3 normal) {
+            vec3 surface = normalize(uLightPosition.xyz - vertex);
+            float surfaceToLight = max(dot(surface, normal), 0.0);
+            vec3 reflection = reflect(-surface, normal);
+            vec3 surfaceToCamera = -vertex;
 
-        vec4 phong(vec4 vertex, vec4 normal) {
-            vec4 surface = normalize(vec4(uLightPosition - vertex));
-            float surfaceToLight = max(dot(normal, surface), 0.0);
-            vec4 reflection = reflect(-surface, normal);
-            vec4 surfaceToCamera = normalize(-vertex);
-
-            vec4 ambient = 1.0 * vec4(0.1, 0.1, 0.1, 0.0);
-            vec4 diffuse = uLightColor * vec4(0.8, 0.8, 0.8, 8.0) * surfaceToLight;
-            vec4 specular = uLightColor * vec4(0.6, 0.6, 0.6, 0.0);
+            vec4 ambient = 1.0 * vec4(0.1, 0.1, 0.1, 1.0);
+            vec4 diffuse = 0.8 * uLightColor * surfaceToLight;
+            vec4 specular = vec4(vec3(0.0, 0.0, 0.0), 1.0);
 
             if (surfaceToLight > 0.0) {
-                specular = specular * pow(max(dot(reflection, surfaceToCamera), 0.0), 5.0);
+               specular = vec4(vec3(0.6 * uLightColor.rgb * pow(max(dot(reflection, surfaceToCamera), 0.0), 5.0)), 1.0);
             }
 
             return vec4(ambient + diffuse + specular);
         }
 
         void main(void) {
-            vec4 vertex = uModelViewMatrix * vVertexPosition;
-            vec4 normal = vVertexNormal;
+            vec3 vertex = normalize((uModelViewMatrix * vVertexPosition).xyz);
+            vec3 normal = normalize(vVertexNormal.xyz);
+
             vec4 vLightIntensity = phong(vertex, normal);
             gl_FragColor = vec4(vec4(vColor * vLightIntensity).rgb, vColor.a);
         }
@@ -91,16 +92,10 @@ function init() {
     var sphere = sphereBuffers(gl);
     const buffers = [cube, sphere];
 
-    // Draw surface
-    var then = 0;
-
     // Draw the scene repeatedly
-    function render(now) {
-        now *= 0.001;  // convert to seconds
-        const deltaTime = now - then;
-        then = now;
+    function render() {
 
-        drawScene(gl, programInfo, buffers, deltaTime);
+        drawScene(gl, programInfo, buffers);
 
         requestAnimationFrame(render);
     }
@@ -242,9 +237,45 @@ function cubeBuffers(gl) {
     const normalsBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, normalsBuffer);
 
-    const normals = [];
+    const normals = [
+        // Front
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
 
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        // Back
+        0.0, 0.0, -1.0,
+        0.0, 0.0, -1.0,
+        0.0, 0.0, -1.0,
+        0.0, 0.0, -1.0,
+
+        // Top
+        0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0,
+
+        // Bottom
+        0.0, -1.0, 0.0,
+        0.0, -1.0, 0.0,
+        0.0, -1.0, 0.0,
+        0.0, -1.0, 0.0,
+
+        // Right
+        1.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+
+        // Left
+        -1.0, 0.0, 0.0,
+        -1.0, 0.0, 0.0,
+        -1.0, 0.0, 0.0,
+        -1.0, 0.0, 0.0,
+    ];
+
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
     const indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -292,7 +323,7 @@ function cubeBuffers(gl) {
 }
 
 
-function drawScene(gl, programInfo, buffers, deltaTime) {
+function drawScene(gl, programInfo, buffers) {
 
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.clearDepth(1.0);
@@ -325,29 +356,17 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
     glMatrix.mat4.translate(cubeMatrix,
                  cubeMatrix,
                  [0.0, 0.0, -5.0]);
-    cubeMatrix = glMatrix.mat4.multiply(cubeMatrix, cubeMatrix, viewMatrix);
+    glMatrix.mat4.multiply(cubeMatrix, cubeMatrix, viewMatrix);
 
     var sphereMatrix = glMatrix.mat4.create();
     glMatrix.mat4.translate(sphereMatrix,
                      sphereMatrix,
                      [10.0, 0.0, -8.0]);
-    sphereMatrix = glMatrix.mat4.multiply(sphereMatrix, sphereMatrix, viewMatrix);
-
-/*
-    glMatrix.mat4.rotate(modelViewMatrix,
-                  modelViewMatrix,
-                  cubeRotation,
-                  [0, 0, 1]);
-    glMatrix.mat4.rotate(modelViewMatrix,
-                  modelViewMatrix,
-                  cubeRotation * .7,
-                  [0, 1, 0]);
-*/
+    glMatrix.mat4.multiply(sphereMatrix, sphereMatrix, viewMatrix);
 
     gl.useProgram(programInfo.program);
     setShapeInfo(buffers[0], 36, gl, programInfo, projectionMatrix, cubeMatrix);
     setShapeInfo(buffers[1], 15000, gl, programInfo, projectionMatrix, sphereMatrix);
-    cubeRotation += deltaTime;
 }
 
 
@@ -411,7 +430,7 @@ function setShapeInfo(buffer, vertexCount, gl, programInfo, projectionMatrix, mo
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer.indices);
 
     // Set the shader uniforms
-    gl.uniform4fv(programInfo.uniformLocations.lightPosition, [5.0, 5.0, -4.0, 0.0]);
+    gl.uniform4fv(programInfo.uniformLocations.lightPosition, [-5.0, 5.0, -5.0, 0.0]);
     gl.uniform4fv(programInfo.uniformLocations.lightColor, [1.0, 0.3, 0.2, 1.0]);
 
     gl.uniformMatrix4fv(
